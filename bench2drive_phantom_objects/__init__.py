@@ -1,4 +1,4 @@
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 _LAZY_IMPORTS = {
     "download_bech2drive_dataset": (".download_dataset", "download_bech2drive_dataset"),

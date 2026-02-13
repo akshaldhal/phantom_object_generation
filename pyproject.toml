@@ -1,6 +1,6 @@
 [project]
 name = "bench2drive-phantom-objects"
-version = "0.1.1"
+version = "0.1.2"
 description = "Phantom object generation for bench2drive dataset"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
