@@ -256,112 +256,40 @@ def process_multiple_files(laz_files, output_file, z_spacing=10.0, color_by='hei
     return True
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description='Convert LAZ point cloud files to OBJ format for visualization',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Single file with height coloring
-  python laz_to_obj.py scan.laz -o output.obj
-
-  # Directory of files stacked vertically
-  python laz_to_obj.py ./lidar/ -o stacked.obj --stack
-
-  # Color by intensity with hot colormap
-  python laz_to_obj.py scan.laz -o output.obj --color-by intensity --colormap hot
-
-  # Subsample to 10k points
-  python laz_to_obj.py scan.laz -o output.obj --subsample 10000
-
-  # Stack first 10 files with custom spacing
-  python laz_to_obj.py ./lidar/ -o stacked.obj --stack --max-files 10 --spacing 15
-        """
-    )
+def laz_to_obj(input_path, output_path, color_by='height', colormap='rainbow', subsample=None):
+    """
+    Convert a LAZ file to an OBJ file.
     
-    parser.add_argument('input', type=str,
-                       help='Input LAZ file or directory containing LAZ files')
-    parser.add_argument('-o', '--output', type=str, default='output.obj',
-                       help='Output OBJ file path')
-    parser.add_argument('--stack', action='store_true',
-                       help='Stack multiple files vertically (for directories)')
-    parser.add_argument('--spacing', type=float, default=10.0,
-                       help='Vertical spacing between stacked scans (meters)')
-    parser.add_argument('--color-by', choices=['height', 'intensity', 'file', 'none'],
-                       default='height',
-                       help='How to color points')
-    parser.add_argument('--colormap', choices=['gray', 'hot', 'viridis', 'jet', 'rainbow', 'terrain', 'ocean'],
-                       default='rainbow',
-                       help='Color scheme')
-    parser.add_argument('--subsample', type=int, default=None,
-                       help='Maximum points per file (for performance)')
-    parser.add_argument('--max-files', type=int, default=None,
-                       help='Maximum number of files to process')
-    
-    args = parser.parse_args()
-    
-    input_path = Path(args.input)
-    
-    # Check if input is file or directory
+    Args:
+        input_path: Path to input .laz file
+        output_path: Path to output .obj file
+        color_by: 'height', 'intensity', 'file', 'none'
+        colormap: 'gray', 'hot', 'viridis', 'jet', 'rainbow', 'terrain', 'ocean'
+        subsample: Maximum number of points (integer) or None
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    input_path = Path(input_path)
+    if not input_path.exists():
+        print(f"Error: {input_path} not found")
+        return False
+        
     if input_path.is_file():
-        # Single file mode
-        if not input_path.suffix == '.laz':
-            print(f"❌ Error: Input file must be .laz format")
-            return
-        
-        success = process_single_file(
-            input_path,
-            args.output,
-            color_by=args.color_by,
-            colormap=args.colormap,
-            subsample=args.subsample
-        )
-        
-        if success:
-            print(f"\n✓ Conversion complete!")
-            print(f"  Open {args.output} in a 3D viewer (MeshLab, Blender, etc.)")
-    
+        if input_path.suffix != '.laz':
+             print(f"Error: Input file must be .laz format")
+             return False
+        return process_single_file(input_path, output_path, color_by, colormap, subsample)
     elif input_path.is_dir():
-        # Directory mode
-        laz_files = sorted(glob.glob(str(input_path / '*.laz')))
-        
-        if not laz_files:
-            print(f"❌ No .laz files found in {input_path}")
-            return
-        
-        # Limit number of files if requested
-        if args.max_files:
-            laz_files = laz_files[:args.max_files]
-        
-        if args.stack:
-            # Stack mode
-            success = process_multiple_files(
-                laz_files,
-                args.output,
-                z_spacing=args.spacing,
-                color_by=args.color_by,
-                colormap=args.colormap,
-                subsample=args.subsample
-            )
-        else:
-            # Process first file only
-            print(f"Processing first file from directory...")
-            print(f"  (Use --stack to combine all files)")
-            success = process_single_file(
-                laz_files[0],
-                args.output,
-                color_by=args.color_by,
-                colormap=args.colormap,
-                subsample=args.subsample
-            )
-        
-        if success:
-            print(f"\n✓ Conversion complete!")
-            print(f"  Open {args.output} in a 3D viewer (MeshLab, Blender, CloudCompare, etc.)")
-    
-    else:
-        print(f"❌ Error: {input_path} not found")
+         # Basic support for directory -> stacked obj if input is directory?
+         # The requirement said "laz source file", but the original code supported dir. 
+         # I'll keep the capability but via this function.
+         laz_files = sorted(glob.glob(str(input_path / '*.laz')))
+         if not laz_files:
+             print(f"No .laz files found in {input_path}")
+             return False
+         # For directory, we default to stacking with default spacing
+         return process_multiple_files(laz_files, output_path, z_spacing=10.0, color_by=color_by, colormap=colormap, subsample=subsample)
+    return False
 
-
-if __name__ == "__main__":
-    main()
+# Backward compatibility alias
+laz_dir_to_obj = laz_to_obj

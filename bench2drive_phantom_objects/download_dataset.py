@@ -1,3 +1,4 @@
+# import _typeshed._type_checker_internals
 from enum import Enum
 from huggingface_hub import snapshot_download
 import os
@@ -106,3 +107,6 @@ def download_bech2drive_dataset(local_dir: str = "data/Bench2Drive", size: Datas
         print("Dataset validation successful.")
     else:
         raise ValueError("Dataset validation failed.")
+
+if __name__ == "__main__":
+    download_bech2drive_dataset()

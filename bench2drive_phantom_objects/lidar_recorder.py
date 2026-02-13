@@ -8,6 +8,7 @@ import laspy
 import random
 from pathlib import Path
 
+# might need fixes or expansion
 CLASS_BLUEPRINT_MAP = {
     'ego_vehicle': 'vehicle.lincoln.mkz_2020',
     'vehicle': 'vehicle.tesla.model3',
@@ -29,6 +30,24 @@ RANDOM_OBJECT_BLUEPRINTS = [
     'static.prop.trafficwarning',
     'static.prop.streetbarrier',
     'static.prop.constructioncone',
+    'static.prop.bin',
+    'static.prop.fountain',
+    'static.prop.kiosk_01',
+    'vehicle.tesla.model3',
+    'vehicle.audi.a2',
+    'vehicle.audi.etron',
+    'vehicle.bmw.grandtourer',
+    'vehicle.chevrolet.impala',
+    'vehicle.dodge.charger_2020',
+    'vehicle.ford.mustang',
+    'vehicle.jeep.wrangler_rubicon',
+    'vehicle.lincoln.mkz_2020',
+    'vehicle.mercedes.coupe',
+    'vehicle.mini.cooper_s',
+    'vehicle.nissan.micra',
+    'vehicle.nissan.patrol',
+    'vehicle.toyota.prius',
+    'vehicle.volkswagen.t2',
 ]
 
 class LidarRecorder:
@@ -44,6 +63,9 @@ class LidarRecorder:
         lower_fov=-30,
         spawn_frequency=(5, 10),
         spawn_range=(5, 10),
+        spawn_rotation_range=(-180, 180),
+        spawn_persist_time_range=(10, 20),
+        allowed_objects=None,
         host='127.0.0.1',
         port=2000,
         verbose=False
@@ -65,6 +87,22 @@ class LidarRecorder:
         
         self.spawn_frequency = spawn_frequency
         self.spawn_range = spawn_range
+        self.spawn_rotation_range = spawn_rotation_range
+        self.spawn_persist_time_range = spawn_persist_time_range
+        self.active_random_actors = []  # List of dicts: {'actor': actor, 'lifetime': int, 'annotation': dict}
+        self.valid_blueprints = []
+        if allowed_objects:
+            for obj in allowed_objects:
+                if obj in RANDOM_OBJECT_BLUEPRINTS:
+                    self.valid_blueprints.append(obj)
+                else:
+                    print(f"Warning: Object '{obj}' not in known blueprints list. Skipping.")
+            
+            if not self.valid_blueprints:
+                print("Warning: No valid objects found in provided list. Defaulting to allowing all.")
+                self.valid_blueprints = RANDOM_OBJECT_BLUEPRINTS
+        else:
+             self.valid_blueprints = RANDOM_OBJECT_BLUEPRINTS
         
         self.lidar_sensor = None
         self.current_lidar_data = None
@@ -140,15 +178,13 @@ class LidarRecorder:
         except Exception:
             return blueprint_library.find('static.prop.fountain')
 
-    def spawn_random_objects(self, world, ego_transform, frame_idx):
-        """Spawn random objects around ego vehicle."""
-        num_objects = random.randint(self.spawn_frequency[0], self.spawn_frequency[1])
-        spawned_objects = []
-        random_actors = []
+    def spawn_random_objects(self, world, ego_transform, frame_idx, count):
+        """Spawn a specific number of random objects around ego vehicle."""
+        newly_spawned = []
         
         blueprint_library = world.get_blueprint_library()
         
-        for i in range(num_objects):
+        for i in range(count):
             # Random distance and angle
             distance = random.uniform(self.spawn_range[0], self.spawn_range[1])
             angle = random.uniform(0, 2 * np.pi)
@@ -166,20 +202,21 @@ class LidarRecorder:
             spawn_rotation = carla.Rotation(
                 pitch=0,
                 roll=0,
-                yaw=random.uniform(0, 360)
+                yaw=random.uniform(self.spawn_rotation_range[0], self.spawn_rotation_range[1])
             )
             
             spawn_transform = carla.Transform(spawn_location, spawn_rotation)
             
             # Try to spawn object
             try:
-                bp_name = random.choice(RANDOM_OBJECT_BLUEPRINTS)
+                bp_name = random.choice(self.valid_blueprints)
                 bp = blueprint_library.find(bp_name)
                 actor = world.try_spawn_actor(bp, spawn_transform)
                 
                 if actor:
                     actor.set_simulate_physics(False)
-                    random_actors.append(actor)
+                    # Use a random lifetime from the range
+                    lifetime = random.randint(self.spawn_persist_time_range[0], self.spawn_persist_time_range[1])
                     
                     # Create annotation for this object
                     bbox = actor.bounding_box
@@ -187,20 +224,24 @@ class LidarRecorder:
                     
                     annotation = {
                         'class': 'random_object',
-                        'id': f'random_{frame_idx}_{i}',
+                        'id': f'random_{frame_idx}_{i}_{random.randint(0, 10000)}',
                         'type_id': bp_name,
                         'base_type': 'static',
                         'location': [spawn_location.x, spawn_location.y, spawn_location.z],
                         'rotation': [spawn_rotation.pitch, spawn_rotation.roll, spawn_rotation.yaw],
                         'extent': [extent.x, extent.y, extent.z],
                     }
-                    spawned_objects.append(annotation)
+                    newly_spawned.append({
+                        'actor': actor,
+                        'lifetime': lifetime,
+                        'annotation': annotation
+                    })
                     
             except Exception as e:
                 if self.verbose:
                     print(f"Failed to spawn random object: {e}")
         
-        return spawned_objects, random_actors
+        return newly_spawned
 
     def replay_and_save_scans(self, instance_path, client):
         instance_path = Path(instance_path)
@@ -317,11 +358,30 @@ class LidarRecorder:
                         spec_rot = carla.Rotation(pitch=-20, yaw=rotation.yaw, roll=0)
                         spectator.set_transform(carla.Transform(spec_loc, spec_rot))
                 
-                # Spawn random objects
-                random_objects_anno = []
-                random_actors = []
+                # Update persistent random objects
+                # 1. Decrement lifetime and remove expired ones
+                still_active = []
+                for obj in self.active_random_actors:
+                    obj['lifetime'] -= 1
+                    if obj['lifetime'] > 0:
+                        still_active.append(obj)
+                    else:
+                        try:
+                            obj['actor'].destroy()
+                        except:
+                            pass
+                self.active_random_actors = still_active
+
+                # 2. Spawn more if needed
                 if ego_transform and self.spawn_frequency[1] > 0:
-                    random_objects_anno, random_actors = self.spawn_random_objects(world, ego_transform, frame_idx)
+                    current_count = len(self.active_random_actors)
+                    target_count = random.randint(self.spawn_frequency[0], self.spawn_frequency[1])
+                    if current_count < target_count:
+                        num_to_spawn = target_count - current_count
+                        new_objs = self.spawn_random_objects(world, ego_transform, frame_idx, num_to_spawn)
+                        self.active_random_actors.extend(new_objs)
+                
+                random_objects_anno = [obj['annotation'] for obj in self.active_random_actors]
                 
                 # Remove actors no longer in scene
                 actors_to_remove = set(spawned_actors.keys()) - current_frame_actor_ids
@@ -365,13 +425,6 @@ class LidarRecorder:
                 with gzip.open(new_anno_file, 'wt') as f:
                     json.dump(new_data, f)
                 
-                # Cleanup random objects for next frame
-                for actor in random_actors:
-                    try:
-                        actor.destroy()
-                    except:
-                        pass
-                
                 if frame_idx % 50 == 0 and scans_saved == 0:
                     print(f"  Progress: {frame_idx}/{len(anno_files)} frames")
             
@@ -380,6 +433,14 @@ class LidarRecorder:
         
         finally:
             print(f"Cleaning up...")
+            
+            # Destroy persistent random objects
+            for obj in self.active_random_actors:
+                try:
+                    obj['actor'].destroy()
+                except:
+                    pass
+            self.active_random_actors = []
             
             if self.lidar_sensor is not None:
                 try:
