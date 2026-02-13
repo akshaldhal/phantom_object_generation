@@ -5,12 +5,12 @@ import requests
 import json
 import hashlib
 import tarfile
- 
+
 class DatasetSize(Enum):
     MINI = "mini"
     BASE = "base"
     FULL = "full"
- 
+
 def validate_dataset(dataset_dir: str, json_file: str) -> bool:
     with open(json_file, "r") as f:
         data = json.load(f)
@@ -42,8 +42,8 @@ def validate_dataset(dataset_dir: str, json_file: str) -> bool:
             with tarfile.open(file_path, "r:gz") as tar:
                 tar.extractall(path=dataset_dir)
     return True
- 
-def download_bech2drive_dataset(local_dir : str ="data/Bench2Drive", size: DatasetSize = DatasetSize.MINI):
+
+def download_bech2drive_dataset(local_dir: str = "data/Bench2Drive", size: DatasetSize = DatasetSize.MINI):
     if (size == DatasetSize.BASE):
         json_link = "https://raw.githubusercontent.com/Thinklab-SJTU/Bench2Drive/main/docs/bench2drive_base_1000.json"
         json_file_name = "bench2drive_base.json"
@@ -55,25 +55,25 @@ def download_bech2drive_dataset(local_dir : str ="data/Bench2Drive", size: Datas
             repo_id=repo_id,
             repo_type="dataset",
             local_dir=local_dir,
-            )
+        )
         response = requests.get(json_link)
         with open(os.path.join(local_dir, json_file_name), "wb") as f:
             f.write(response.content)
     elif (size == DatasetSize.FULL):
-      json_link = "https://raw.githubusercontent.com/Thinklab-SJTU/Bench2Drive/main/docs/bench2drive_full+sup_13638.json"
-      json_file_name = "bench2drive_full.json"
-      local_dir = local_dir + "-full"
-      os.makedirs(local_dir, exist_ok=True)
-      repo_id = "rethinklab/Bench2Drive-Full"
-      print(f"Downloading base Bench2Drive-Full dataset into {local_dir} ...")
-      snapshot_download(
-          repo_id=repo_id,
-          repo_type="dataset",
-          local_dir=local_dir,
-          )
-      response = requests.get(json_link)
-      with open(os.path.join(local_dir, json_file_name), "wb") as f:
-          f.write(response.content)
+        json_link = "https://raw.githubusercontent.com/Thinklab-SJTU/Bench2Drive/main/docs/bench2drive_full+sup_13638.json"
+        json_file_name = "bench2drive_full.json"
+        local_dir = local_dir + "-full"
+        os.makedirs(local_dir, exist_ok=True)
+        repo_id = "rethinklab/Bench2Drive-Full"
+        print(f"Downloading base Bench2Drive-Full dataset into {local_dir} ...")
+        snapshot_download(
+            repo_id=repo_id,
+            repo_type="dataset",
+            local_dir=local_dir,
+        )
+        response = requests.get(json_link)
+        with open(os.path.join(local_dir, json_file_name), "wb") as f:
+            f.write(response.content)
     else:
         json_link = "https://raw.githubusercontent.com/Thinklab-SJTU/Bench2Drive/main/docs/bench2drive_mini_10.json"
         json_file_name = "bench2drive_mini.json"
@@ -106,17 +106,3 @@ def download_bech2drive_dataset(local_dir : str ="data/Bench2Drive", size: Datas
         print("Dataset validation successful.")
     else:
         raise ValueError("Dataset validation failed.")
- 
-# def download_bench2drive_maps(local_dir: str = "data/Bench2Drive-maps"):
-#     repo_id = "rethinklab/Bench2Drive-Map"
-#     os.makedirs(local_dir, exist_ok=True)
-#     print(f"Downloading Bench2Drive maps into {local_dir} ...")
-#     snapshot_download(
-#         repo_id=repo_id,
-#         repo_type="dataset",
-#         local_dir=local_dir,
-#     )
- 
- 
-if __name__ == "__main__":
-  download_bech2drive_dataset()

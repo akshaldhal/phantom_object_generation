@@ -1,9 +1,3 @@
-"""
-LiDAR Point Cloud Visualizer
-Converts .laz files to .obj format for 3D visualization.
-Supports single files or multiple files stacked vertically.
-"""
-
 import argparse
 import numpy as np
 import laspy
