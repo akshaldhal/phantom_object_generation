@@ -7,6 +7,10 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "carla>=0.9.16",
     "huggingface-hub>=1.4.1",
+    "laspy>=2.7.0",
+    "laszip>=0.3.0",
+    "lazrs>=0.8.1",
     "numpy>=2.4.2",
     "requests>=2.32.5",
+    "scipy>=1.17.0",
 ]
