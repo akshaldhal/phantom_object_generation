@@ -1,6 +1,5 @@
 import argparse
 import sys
-from pathlib import Path
 from .download_dataset import download_bech2drive_dataset, DatasetSize
 from .laz_to_obj import laz_to_obj
 from .lidar_recorder import LidarRecorder

@@ -16,59 +16,6 @@ pip install .
 
 > **Note:** CARLA (`carla>=0.9.16`) must be available in your Python environment. You may need to install it separately depending on your CARLA server version.
 
-## CLI Usage
-
-After installation, the `bench2drive-phantom` command is available:
-
-### Download Dataset
-
-```bash
-bench2drive-phantom download --size mini --dir data/Bench2Drive
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--size` | `mini` | Dataset size: `mini`, `base`, or `full` |
-| `--dir` | `data/Bench2Drive` | Target download directory |
-
-### Record LiDAR Scans
-
-```bash
-bench2drive-phantom record \
-  --dataset-path data/Bench2Drive-mini \
-  --output-path data/recorded-lidar \
-  --spawn-min 3 --spawn-max 8 \
-  --spawn-persist-min 10 --spawn-persist-max 30 \
-  --allowed-objects vehicle.tesla.model3 static.prop.trafficcone01
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--dataset-path` | `data/Bench2Drive-mini/` | Path to Bench2Drive dataset |
-| `--output-path` | `./data/recorded-lidar` | Output directory for scans |
-| `--host` / `--port` | `127.0.0.1` / `2000` | CARLA server address |
-| `--channels` | `64` | LiDAR channels |
-| `--spawn-min` / `--spawn-max` | `5` / `10` | Random object count range |
-| `--spawn-range-min` / `--spawn-range-max` | `5.0` / `10.0` | Spawn distance range (m) |
-| `--spawn-persist-min` / `--spawn-persist-max` | `10` / `20` | Frame persistence range |
-| `--spawn-rotation-min` / `--spawn-rotation-max` | `-180` / `180` | Spawn rotation range (°) |
-| `--allowed-objects` | all | Space-separated list of allowed blueprint IDs |
-| `--verbose` | off | Enable verbose output |
-
-### Convert LAZ to OBJ
-
-```bash
-bench2drive-phantom convert scan.laz -o output.obj --color-by height --colormap rainbow
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `input` | *(required)* | Input `.laz` file or directory |
-| `-o` / `--output` | `output.obj` | Output `.obj` file path |
-| `--color-by` | `height` | Coloring: `height`, `intensity`, `file`, `none` |
-| `--colormap` | `rainbow` | Color scheme: `gray`, `hot`, `viridis`, `jet`, `rainbow`, `terrain`, `ocean` |
-| `--subsample` | none | Max points to keep |
-
 ## Python API
 
 ```python

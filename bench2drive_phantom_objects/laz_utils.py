@@ -1,3 +1,4 @@
+# THIS FILE NEEDS FIXES/REWRITING
 import argparse
 import numpy as np
 import laspy
@@ -290,6 +291,3 @@ def laz_to_obj(input_path, output_path, color_by='height', colormap='rainbow', s
          # For directory, we default to stacking with default spacing
          return process_multiple_files(laz_files, output_path, z_spacing=10.0, color_by=color_by, colormap=colormap, subsample=subsample)
     return False
-
-# Backward compatibility alias
-laz_dir_to_obj = laz_to_obj
