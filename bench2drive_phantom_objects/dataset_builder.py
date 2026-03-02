@@ -2,6 +2,7 @@ import glob
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import Optional
 
 import carla
 
@@ -78,6 +79,7 @@ class DatasetBuilder:
     source_dataset_path: str = "data/Bench2Drive-mini/"
     fixed_delta_seconds: float = 0.05
     output_path: str = "./data/recorded-lidar"
+    instance_filter: Optional[list[str]] = None
     host: str = "127.0.0.1"
     port: int = 2000
     lidar_config: LidarConfig = field(default_factory=LidarConfig)
@@ -129,6 +131,12 @@ class DatasetBuilder:
 
             windows = _chunk(anno_files, self.frame_split)
             for window_idx, window_files in enumerate(windows):
+                if len(window_files) < self.frame_split:
+                    print(
+                        f"skipping short window {window_idx} ({len(window_files)}/{self.frame_split} frames)"
+                    )
+                    continue
+
                 # each window is a separate output sub-instance, named {instance}_{window_idx:04d}
                 sub_instance = instance.parent / f"{instance.name}_{window_idx:04d}"
 
@@ -147,7 +155,9 @@ class DatasetBuilder:
                         saved = recorder.process_frame(
                             anno_file=anno_file,
                             frame_idx=frame_idx,
-                            perturbation=self.perturbation if self.mask[frame_idx] else None,
+                            perturbation=self.perturbation
+                            if self.mask[frame_idx]
+                            else None,
                         )
                         if saved:
                             scans_saved += 1

@@ -1,9 +1,9 @@
 __version__ = "0.2.0"
 
-from .download_dataset import download_bech2drive_dataset, DatasetSize
-from .lidar_recorder import LidarRecorder
+from .dataset_builder import DatasetBuilder, LidarConfig, build_mask
+from .download_dataset import DatasetSize, download_bech2drive_dataset
 from .laz_utils import laz_to_obj
-from .dataset_builder import LidarConfig, DatasetBuilder, build_mask
+from .lidar_recorder import LidarRecorder
 
 __all__ = [
     "download_bech2drive_dataset",
