@@ -108,9 +108,14 @@ class DatasetBuilder:
         base = Path(self.source_dataset_path)
         if (base / "anno").exists():
             return [base]
-        return [
-            d for d in sorted(base.iterdir()) if d.is_dir() and (d / "anno").exists()
-        ]
+        instances = [d for d in base.iterdir() if d.is_dir() and (d / "anno").exists()]
+        if self.instance_filter:
+            instances = [d for d in instances if any(f in d.name for f in self.instance_filter)]
+        def town_key(p: Path):
+            part = next((s for s in p.name.split('_') if s.startswith('Town')), 'Town00')
+            return part
+        
+        return sorted(instances, key=town_key)
 
     def build_dataset(self):
         assert len(self.mask) == self.frame_split, (

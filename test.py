@@ -40,7 +40,6 @@ dataset_builder = DatasetBuilder(
   # 
   # IMP MODIFICATION:  we are not splitting dataset ionto frames, rather we're applying windows of perturbed or clean of size n (32 in this casee) onto the entire thing, need to be 20-30 second each sample
   # 
-  # feat: datset instance filtering,and sorting by towns
   # feat: implement an improved laz_utils with some sanity checks etc
   # feat: align default configs with the waymo open
   # 
@@ -51,24 +50,6 @@ dataset_builder = DatasetBuilder(
 )
 
 dataset_builder.build_dataset()
-
-"""
-def _collect_instances(self) -> list[Path]:
-    base = Path(self.source_dataset_path)
-    if (base / "anno").exists():
-        return [base]
-    instances = [d for d in base.iterdir() if d.is_dir() and (d / "anno").exists()]
-    
-    if self.instance_filter:
-        instances = [d for d in instances if any(f in d.name for f in self.instance_filter)]
-    
-    # sort by town name to minimize world reloads
-    def town_key(p: Path):
-        part = next((s for s in p.name.split('_') if s.startswith('Town')), 'Town00')
-        return part
-    
-    return sorted(instances, key=town_key)
-"""
 
 """
 The core constraint is this relationship:
