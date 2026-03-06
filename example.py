@@ -34,7 +34,7 @@ def demo_pipeline():
     builder = DatasetBuilder(
         perturbation=perturbation,
         mask=mask,
-        source_dataset_path=DATA_DIR + "./Bench2Drive-mini",
+        source_dataset_path=DATA_DIR + "/Bench2Drive-mini",
         fixed_delta_seconds=0.05,
         output_path=OUTPUT_DIR,
         lidar_config=LidarConfig(),
