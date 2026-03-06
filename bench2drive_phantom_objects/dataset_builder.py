@@ -109,11 +109,16 @@ class DatasetBuilder:
             return [base]
         instances = [d for d in base.iterdir() if d.is_dir() and (d / "anno").exists()]
         if self.instance_filter:
-            instances = [d for d in instances if any(f in d.name for f in self.instance_filter)]
+            instances = [
+                d for d in instances if any(f in d.name for f in self.instance_filter)
+            ]
+
         def town_key(p: Path):
-            part = next((s for s in p.name.split('_') if s.startswith('Town')), 'Town00')
+            part = next(
+                (s for s in p.name.split("_") if s.startswith("Town")), "Town00"
+            )
             return part
-        
+
         return sorted(instances, key=town_key)
 
     def build_dataset(self):
@@ -121,14 +126,14 @@ class DatasetBuilder:
         if not instances:
             print(f"no instances found at {self.source_dataset_path}")
             return
-    
+
         try:
             client = carla.Client(self.host, self.port)
             client.set_timeout(200.0)
         except Exception as e:
             print(f"carla connection failed: {e}")
             return
-    
+
         recorder = LidarRecorder(
             class_blueprint_map=self.class_blueprint_map,
             mesh_id_map=self.mesh_id_map,
@@ -137,39 +142,42 @@ class DatasetBuilder:
             output_path=self.output_path,
             verbose=self.verbose,
         )
-    
+
         n = len(self.mask)
         total_scans = 0
         for instance in instances:
             anno_files = sorted(glob.glob(str(instance / "anno" / "*.json.gz")))
             if not anno_files:
                 continue
-    
+
             try:
                 recorder.output_path = Path(self.output_path)
                 if not recorder.initialize_scene(instance, client):
                     continue
-    
+
                 scans_saved = 0
                 for frame_idx, anno_file in enumerate(anno_files):
                     saved = recorder.process_frame(
                         anno_file=anno_file,
                         frame_idx=frame_idx,
-                        perturbation=self.perturbation if self.mask[frame_idx % n] else None,
+                        perturbation=self.perturbation
+                        if self.mask[frame_idx % n]
+                        else None,
                     )
                     if saved:
                         scans_saved += 1
-    
+
                 print(f"{instance.name}: {scans_saved}/{len(anno_files)} scans")
                 total_scans += scans_saved
-    
+
             except KeyboardInterrupt:
                 return
             except Exception as e:
                 print(f"error on {instance.name}: {e}")
                 import traceback
+
                 traceback.print_exc()
             finally:
                 recorder.cleanup()
-    
+
         print(f"done. total scans: {total_scans}")
