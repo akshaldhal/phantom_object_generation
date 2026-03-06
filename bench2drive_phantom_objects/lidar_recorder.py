@@ -10,6 +10,8 @@ import laspy
 import numpy as np
 
 
+EGO_RELATIVE_COORDINATES = True
+
 @dataclass
 class Perturbation:
     blueprint: str
@@ -69,13 +71,26 @@ class LidarRecorder:
         )
         self.lidar_sensor.listen(self._lidar_callback)
 
-    def _save_lidar_scan(self, lidar_data: np.ndarray, frame_idx: int) -> bool:
+    def _save_lidar_scan(self, lidar_data: np.ndarray, frame_idx: int, ego_transform: Optional[carla.Transform] = None) -> bool:
         try:
+            pts = lidar_data[:, :3].copy()
+    
+            if EGO_RELATIVE_COORDINATES and ego_transform is not None:
+                # Translate then rotate into ego-vehicle local space
+                pts[:, 0] -= ego_transform.location.x
+                pts[:, 1] -= ego_transform.location.y
+                pts[:, 2] -= ego_transform.location.z
+                yaw_rad = np.deg2rad(ego_transform.rotation.yaw)
+                cos_y, sin_y = np.cos(-yaw_rad), np.sin(-yaw_rad)
+                x_rot = cos_y * pts[:, 0] - sin_y * pts[:, 1]
+                y_rot = sin_y * pts[:, 0] + cos_y * pts[:, 1]
+                pts[:, 0], pts[:, 1] = x_rot, y_rot
+    
             header = laspy.LasHeader(point_format=0, version="1.2")
-            header.offsets = np.min(lidar_data[:, :3], axis=0)
+            header.offsets = pts.min(axis=0)
             header.scales = np.array([0.001, 0.001, 0.001])
             las = laspy.LasData(header)
-            las.x, las.y, las.z = lidar_data[:, 0], lidar_data[:, 1], lidar_data[:, 2]
+            las.x, las.y, las.z = pts[:, 0], pts[:, 1], pts[:, 2]
             if lidar_data.shape[1] > 3:
                 las.intensity = (lidar_data[:, 3] * 65535).astype(np.uint16)
             las.write(str(self.lidar_dir / f"{frame_idx:05d}.laz"))
@@ -109,35 +124,27 @@ class LidarRecorder:
         self, p: Perturbation, ego_transform: carla.Transform, frame_idx: int
     ) -> Optional[dict]:
         import random
-
+    
         if p.global_position_fixed and self._perturbation_fixed_location is not None:
-            base_loc = self._perturbation_fixed_location
+            world_loc = self._perturbation_fixed_location
         else:
-            angle_rad = np.deg2rad(p.rotation_angle)
-            base_loc = carla.Location(
-                x=ego_transform.location.x
-                + p.spawn_distance_from_ego * np.cos(angle_rad),
-                y=ego_transform.location.y
-                + p.spawn_distance_from_ego * np.sin(angle_rad),
+            ego_yaw_rad = np.deg2rad(ego_transform.rotation.yaw)
+            offset_angle_rad = np.deg2rad(p.rotation_angle)
+            combined = ego_yaw_rad + offset_angle_rad
+            world_loc = carla.Location(
+                x=ego_transform.location.x + p.spawn_distance_from_ego * np.cos(combined),
+                y=ego_transform.location.y + p.spawn_distance_from_ego * np.sin(combined),
                 z=ego_transform.location.z,
             )
             if p.global_position_fixed:
-                self._perturbation_fixed_location = base_loc
-
-        jx = (
-            random.uniform(-p.position_jitter, p.position_jitter)
-            if p.position_jitter
-            else 0.0
-        )
-        jy = (
-            random.uniform(-p.position_jitter, p.position_jitter)
-            if p.position_jitter
-            else 0.0
-        )
-        location = carla.Location(x=base_loc.x + jx, y=base_loc.y + jy, z=base_loc.z)
-        rotation = carla.Rotation(yaw=float(p.rotation_angle))
-        transform = carla.Transform(location, rotation)
-
+                self._perturbation_fixed_location = world_loc
+    
+        jx = random.uniform(-p.position_jitter, p.position_jitter) if p.position_jitter else 0.0
+        jy = random.uniform(-p.position_jitter, p.position_jitter) if p.position_jitter else 0.0
+        world_loc = carla.Location(x=world_loc.x + jx, y=world_loc.y + jy, z=world_loc.z)
+        rotation = carla.Rotation(yaw=float(ego_transform.rotation.yaw + p.rotation_angle))
+        transform = carla.Transform(world_loc, rotation)
+    
         if self._perturbation_actor is None or not self._perturbation_actor.is_alive:
             self._destroy_perturbation_actor()
             try:
@@ -154,15 +161,32 @@ class LidarRecorder:
                 return None
         else:
             self._perturbation_actor.set_transform(transform)
-
+    
         extent = self._perturbation_actor.bounding_box.extent
+    
+        if EGO_RELATIVE_COORDINATES:
+            dx = world_loc.x - ego_transform.location.x
+            dy = world_loc.y - ego_transform.location.y
+            dz = world_loc.z - ego_transform.location.z
+            ego_yaw_rad = np.deg2rad(ego_transform.rotation.yaw)
+            cos_y, sin_y = np.cos(-ego_yaw_rad), np.sin(-ego_yaw_rad)
+            save_loc = [
+                cos_y * dx - sin_y * dy,
+                sin_y * dx + cos_y * dy,
+                dz,
+            ]
+            save_rot = [rotation.pitch, rotation.roll, rotation.yaw - ego_transform.rotation.yaw]
+        else:
+            save_loc = [world_loc.x, world_loc.y, world_loc.z]
+            save_rot = [rotation.pitch, rotation.roll, rotation.yaw]
+    
         return {
             "class": "perturbation",
             "id": f"perturbation_{frame_idx}",
             "type_id": p.blueprint,
             "base_type": "static",
-            "location": [location.x, location.y, location.z],
-            "rotation": [rotation.pitch, rotation.roll, rotation.yaw],
+            "location": save_loc,
+            "rotation": save_rot,
             "extent": [extent.x, extent.y, extent.z],
             "global_position_fixed": p.global_position_fixed,
         }
@@ -330,7 +354,7 @@ class LidarRecorder:
             fired = self._lidar_event.wait(timeout=self.fixed_delta_seconds * 3)
             self._lidar_event.clear()
             if fired and self.current_lidar_data is not None:
-                scan_saved = self._save_lidar_scan(self.current_lidar_data, frame_idx)
+                scan_saved = self._save_lidar_scan(self.current_lidar_data, frame_idx, ego_transform)
                 self.lidar_data_ready = False
             elif not fired:
                 print(f"lidar callback timeout frame {frame_idx}")

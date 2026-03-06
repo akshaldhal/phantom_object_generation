@@ -43,7 +43,6 @@ dataset_builder = DatasetBuilder(
   # todo: fix readme with proper documentation
   # 
   # feat: impliment a bench2drive to waymo pipline, can be a data to data pipeline
-  # feat: check coordinates, global vs ego-vehicle coordinate space, which is applied to perturbations, stick with the waymo format
 )
 
 dataset_builder.build_dataset()
