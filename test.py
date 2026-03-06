@@ -34,11 +34,8 @@ dataset_builder = DatasetBuilder(
   lidar_config=LidarConfig(),
   class_blueprint_map=CLASS_BLUEPRINT_MAP,
   mesh_id_map=MESH_ID_MAP,
-  frame_split=32,
   verbose=True
   # fix: Perturbaiton does not pivot with the car with global: false setting
-  # 
-  # IMP MODIFICATION:  we are not splitting dataset ionto frames, rather we're applying windows of perturbed or clean of size n (32 in this casee) onto the entire thing, need to be 20-30 second each sample
   # 
   # feat: implement an improved laz_utils with some sanity checks etc
   # feat: align default configs with the waymo open

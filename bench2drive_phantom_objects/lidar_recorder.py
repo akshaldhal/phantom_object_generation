@@ -181,17 +181,13 @@ class LidarRecorder:
         self,
         instance_path: Path,
         client: carla.Client,
-        source_instance: Optional[Path] = None,
     ) -> bool:
         instance_path = Path(instance_path)
-        name_for_map = (
-            Path(source_instance).name if source_instance else instance_path.name
-        )
         town_name = next(
-            (p for p in name_for_map.split("_") if p.startswith("Town")), None
-        )
+                (p for p in instance_path.name.split("_") if p.startswith("Town")), None
+            )
         if not town_name:
-            print(f"could not identify map from '{name_for_map}'")
+            print(f"could not identify map from '{str(instance_path)}'")
             return False
 
         try:

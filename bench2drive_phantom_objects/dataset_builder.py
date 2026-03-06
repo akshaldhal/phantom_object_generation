@@ -101,7 +101,6 @@ class DatasetBuilder:
         default_factory=lambda: CLASS_BLUEPRINT_MAP.copy()
     )
     mesh_id_map: dict[str, str] = field(default_factory=lambda: MESH_ID_MAP.copy())
-    frame_split: int = 32  # each instance is split into windows of this many frames
     verbose: bool = False
 
     def _collect_instances(self) -> list[Path]:
@@ -118,21 +117,18 @@ class DatasetBuilder:
         return sorted(instances, key=town_key)
 
     def build_dataset(self):
-        assert len(self.mask) == self.frame_split, (
-            "Mask should be same length as frame_split"
-        )
         instances = self._collect_instances()
         if not instances:
             print(f"no instances found at {self.source_dataset_path}")
             return
-
+    
         try:
             client = carla.Client(self.host, self.port)
             client.set_timeout(200.0)
         except Exception as e:
             print(f"carla connection failed: {e}")
             return
-
+    
         recorder = LidarRecorder(
             class_blueprint_map=self.class_blueprint_map,
             mesh_id_map=self.mesh_id_map,
@@ -141,59 +137,39 @@ class DatasetBuilder:
             output_path=self.output_path,
             verbose=self.verbose,
         )
-
+    
+        n = len(self.mask)
         total_scans = 0
         for instance in instances:
             anno_files = sorted(glob.glob(str(instance / "anno" / "*.json.gz")))
             if not anno_files:
                 continue
-
-            windows = _chunk(anno_files, self.frame_split)
-            for window_idx, window_files in enumerate(windows):
-                if len(window_files) < self.frame_split:
-                    print(
-                        f"skipping short window {window_idx} ({len(window_files)}/{self.frame_split} frames)"
-                    )
+    
+            try:
+                recorder.output_path = Path(self.output_path)
+                if not recorder.initialize_scene(instance, client):
                     continue
-
-                # each window is a separate output sub-instance, named {instance}_{window_idx:04d}
-                sub_instance = instance.parent / f"{instance.name}_{window_idx:04d}"
-
-                try:
-                    # initialize_scene reads the town name from the path, so we pass a
-                    # synthetic path that preserves the original name for map resolution
-                    # but writes output into the sub-instance directory
-                    recorder.output_path = Path(self.output_path)
-                    if not recorder.initialize_scene(
-                        sub_instance, client, source_instance=instance
-                    ):
-                        continue
-
-                    scans_saved = 0
-                    for frame_idx, anno_file in enumerate(window_files):
-                        saved = recorder.process_frame(
-                            anno_file=anno_file,
-                            frame_idx=frame_idx,
-                            perturbation=self.perturbation
-                            if self.mask[frame_idx]
-                            else None,
-                        )
-                        if saved:
-                            scans_saved += 1
-
-                    print(
-                        f"{instance.name} window {window_idx}: {scans_saved}/{len(window_files)} scans"
+    
+                scans_saved = 0
+                for frame_idx, anno_file in enumerate(anno_files):
+                    saved = recorder.process_frame(
+                        anno_file=anno_file,
+                        frame_idx=frame_idx,
+                        perturbation=self.perturbation if self.mask[frame_idx % n] else None,
                     )
-                    total_scans += scans_saved
-
-                except KeyboardInterrupt:
-                    return
-                except Exception as e:
-                    print(f"error on {instance.name} window {window_idx}: {e}")
-                    import traceback
-
-                    traceback.print_exc()
-                finally:
-                    recorder.cleanup()
-
+                    if saved:
+                        scans_saved += 1
+    
+                print(f"{instance.name}: {scans_saved}/{len(anno_files)} scans")
+                total_scans += scans_saved
+    
+            except KeyboardInterrupt:
+                return
+            except Exception as e:
+                print(f"error on {instance.name}: {e}")
+                import traceback
+                traceback.print_exc()
+            finally:
+                recorder.cleanup()
+    
         print(f"done. total scans: {total_scans}")
