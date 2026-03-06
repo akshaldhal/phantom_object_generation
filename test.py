@@ -35,8 +35,6 @@ dataset_builder = DatasetBuilder(
   class_blueprint_map=CLASS_BLUEPRINT_MAP,
   mesh_id_map=MESH_ID_MAP,
   verbose=True
-  # fix: Perturbaiton does not pivot with the car with global: false setting
-  # 
   # feat: implement an improved laz_utils with some sanity checks etc
   # feat: align default configs with the waymo open
   # 
