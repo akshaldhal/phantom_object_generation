@@ -1,4 +1,5 @@
 import glob
+import random
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -26,23 +27,36 @@ MESH_ID_MAP: dict[str, str] = {
 
 
 class PerturbationPattern(Enum):
-    CLEAN_HISTORY = 1  # only last frame perturbed
-    CLEAN_OBSERVATION = 2  # all frames except last perturbed
-    CONSTANT = 3  # every frame perturbed
-    IN_AND_OUT = 4  # first half perturbed, second half clean
+    CLEAN_HISTORY = 1  # First part clean, second part perturbed
+    CLEAN_OBSERVATION = 2  # First part perturbed, second part clean
+    CONSTANT = 3  # All perturbed
+    IN_AND_OUT = 4  # Randomly enter and exit perturbation
+    NOISY_MIDDLE = 5  # Clean, then perturbed, then clean again
 
 
 def build_mask(pattern: PerturbationPattern, n: int) -> list[bool]:
     match pattern:
         case PerturbationPattern.CLEAN_HISTORY:
-            return [False] * (n - 1) + [True]
+            split = random.randint(1, n - 1)
+            return [False] * split + [True] * (n - split)
+
         case PerturbationPattern.CLEAN_OBSERVATION:
-            return [True] * (n - 1) + [False]
+            split = random.randint(1, n - 1)
+            return [True] * split + [False] * (n - split)
+
         case PerturbationPattern.CONSTANT:
             return [True] * n
+
         case PerturbationPattern.IN_AND_OUT:
-            half = n // 2
-            return [True] * half + [False] * (n - half)
+            start = random.randint(0, n - 1)
+            end = random.randint(start + 1, n)
+            return [True if start <= i < end else False for i in range(n)]
+
+        case PerturbationPattern.NOISY_MIDDLE:
+            a = random.randint(1, n - 2)
+            b = random.randint(a + 1, n - 1)
+            return [False] * a + [True] * (b - a) + [False] * (n - b)
+
         case _:
             raise ValueError(f"unknown pattern: {pattern}")
 

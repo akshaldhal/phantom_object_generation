@@ -37,14 +37,17 @@ dataset_builder = DatasetBuilder(
   frame_split=32,
   verbose=True
   # fix: Perturbaiton does not pivot with the car with global: false setting
+  # 
+  # IMP MODIFICATION:  we are not splitting dataset ionto frames, rather we're applying windows of perturbed or clean of size n (32 in this casee) onto the entire thing, need to be 20-30 second each sample
+  # 
   # feat: datset instance filtering,and sorting by towns
-  # feat: align default configs with the waymo open
-  # feat: improved, randomized, build mask function
   # feat: implement an improved laz_utils with some sanity checks etc
+  # feat: align default configs with the waymo open
+  # 
   # todo: fix readme with proper documentation
-  # todo: implement some unit tests
-  # todo: lenght of perturbed history should be varible
-  # todo: generate mini subsest of spoofed data samples
+  # 
+  # feat: impliment a bench2drive to waymo pipline, can be a data to data pipeline
+  # feat: check coordinates, global vs ego-vehicle coordinate space, which is applied to perturbations, stick with the waymo format
 )
 
 dataset_builder.build_dataset()
