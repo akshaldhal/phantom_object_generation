@@ -69,7 +69,7 @@ def _chunk(lst: list, size: int) -> list[list]:
 class LidarConfig:
     channels: int = 64
     points_per_second: int = 2_240_000
-    rotation_frequency: int = 20
+    rotation_frequency: int = 10
     range: int = 100
     upper_fov: int = 10
     lower_fov: int = -30
@@ -91,7 +91,7 @@ class DatasetBuilder:
     mask: list[bool]
 
     source_dataset_path: str = "data/Bench2Drive-mini/"
-    fixed_delta_seconds: float = 0.05
+    fixed_delta_seconds: float = 0.1
     output_path: str = "./data/recorded-lidar"
     instance_filter: Optional[list[str]] = None
     host: str = "127.0.0.1"

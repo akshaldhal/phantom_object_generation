@@ -35,7 +35,6 @@ def demo_pipeline():
         perturbation=perturbation,
         mask=mask,
         source_dataset_path=DATA_DIR + "/Bench2Drive-mini",
-        fixed_delta_seconds=0.05,
         output_path=OUTPUT_DIR,
         lidar_config=LidarConfig(),
         class_blueprint_map=CLASS_BLUEPRINT_MAP,
@@ -50,12 +49,9 @@ def demo_pipeline():
 if __name__ == "__main__":
     demo_pipeline()
 
-# feat: implement an improved laz_utils with some sanity checks etc
-# feat: align default configs with the waymo open
-#
+
 # todo: fix readme with proper documentation
-#
-# feat: impliment a bench2drive to waymo pipline, can be a data to data pipeline
+# todo: impliment a bench2drive to waymo pipline, can be a data to data pipeline
 
 """
 The core constraint is this relationship:
