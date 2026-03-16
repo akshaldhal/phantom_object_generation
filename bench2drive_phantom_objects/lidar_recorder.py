@@ -9,8 +9,6 @@ import carla
 import laspy
 import numpy as np
 
-EGO_RELATIVE_COORDINATES = True
-
 
 @dataclass
 class Perturbation:
@@ -79,17 +77,6 @@ class LidarRecorder:
     ) -> bool:
         try:
             pts = lidar_data[:, :3].copy()
-
-            if EGO_RELATIVE_COORDINATES and ego_transform is not None:
-                # Translate then rotate into ego-vehicle local space
-                pts[:, 0] -= ego_transform.location.x
-                pts[:, 1] -= ego_transform.location.y
-                pts[:, 2] -= ego_transform.location.z
-                yaw_rad = np.deg2rad(ego_transform.rotation.yaw)
-                cos_y, sin_y = np.cos(-yaw_rad), np.sin(-yaw_rad)
-                x_rot = cos_y * pts[:, 0] - sin_y * pts[:, 1]
-                y_rot = sin_y * pts[:, 0] + cos_y * pts[:, 1]
-                pts[:, 0], pts[:, 1] = x_rot, y_rot
 
             header = laspy.LasHeader(point_format=0, version="1.2")
             header.offsets = pts.min(axis=0)
@@ -165,43 +152,39 @@ class LidarRecorder:
         transform = carla.Transform(world_loc, rotation)
 
         if self._perturbation_actor is None or not self._perturbation_actor.is_alive:
-            self._destroy_perturbation_actor()
-            try:
-                actor = self.world.try_spawn_actor(
-                    self.blueprint_library.find(p.blueprint), transform
-                )
-                if not actor:
-                    print(f"could not spawn perturbation '{p.blueprint}'")
-                    return None
-                actor.set_simulate_physics(False)
-                self._perturbation_actor = actor
-            except Exception as e:
-                print(f"perturbation spawn failed: {e}")
+            bp = self.blueprint_library.find(p.blueprint)
+            # Spawn high above the scene where nothing exists, then teleport down
+            clear_transform = carla.Transform(
+                carla.Location(x=transform.location.x, y=transform.location.y, z=100.0),
+                transform.rotation,
+            )
+            actor = self.world.try_spawn_actor(bp, clear_transform)
+            if actor is None:
+                print(f"could not spawn perturbation '{p.blueprint}'")
                 return None
+            actor.set_simulate_physics(False)
+            actor.set_transform(transform)  # teleport to real position
+            self._perturbation_actor = actor
         else:
             self._perturbation_actor.set_transform(transform)
 
         extent = self._perturbation_actor.bounding_box.extent
 
-        if EGO_RELATIVE_COORDINATES:
-            dx = world_loc.x - ego_transform.location.x
-            dy = world_loc.y - ego_transform.location.y
-            dz = world_loc.z - ego_transform.location.z
-            ego_yaw_rad = np.deg2rad(ego_transform.rotation.yaw)
-            cos_y, sin_y = np.cos(-ego_yaw_rad), np.sin(-ego_yaw_rad)
-            save_loc = [
-                cos_y * dx - sin_y * dy,
-                sin_y * dx + cos_y * dy,
-                dz,
-            ]
-            save_rot = [
-                rotation.pitch,
-                rotation.roll,
-                rotation.yaw - ego_transform.rotation.yaw,
-            ]
-        else:
-            save_loc = [world_loc.x, world_loc.y, world_loc.z]
-            save_rot = [rotation.pitch, rotation.roll, rotation.yaw]
+        dx = world_loc.x - ego_transform.location.x
+        dy = world_loc.y - ego_transform.location.y
+        dz = world_loc.z - ego_transform.location.z
+        ego_yaw_rad = np.deg2rad(ego_transform.rotation.yaw)
+        cos_y, sin_y = np.cos(-ego_yaw_rad), np.sin(-ego_yaw_rad)
+        save_loc = [
+            cos_y * dx - sin_y * dy,
+            sin_y * dx + cos_y * dy,
+            dz,
+        ]
+        save_rot = [
+            rotation.pitch,
+            rotation.roll,
+            rotation.yaw - ego_transform.rotation.yaw,
+        ]
 
         return {
             "class": "perturbation",
@@ -377,9 +360,7 @@ class LidarRecorder:
             fired = self._lidar_event.wait(timeout=self.fixed_delta_seconds * 3)
             self._lidar_event.clear()
             if fired and self.current_lidar_data is not None:
-                scan_saved = self._save_lidar_scan(
-                    self.current_lidar_data, frame_idx, ego_transform
-                )
+                scan_saved = self._save_lidar_scan(self.current_lidar_data, frame_idx)
                 self.lidar_data_ready = False
             elif not fired:
                 print(f"lidar callback timeout frame {frame_idx}")

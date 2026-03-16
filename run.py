@@ -1,9 +1,20 @@
-import itertools
+# for each sample randomly sasmple 1 variation
+# 
+# json to record metadata
+# 
+# run on the mini dataset
+# 
+# make distances a range, np.random.sample, similar for angles
+
+
+import json
 import random
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+
+import numpy as np
 
 from bench2drive_phantom_objects import DatasetBuilder, LidarConfig, build_mask
 from bench2drive_phantom_objects.dataset_builder import Perturbation, PerturbationPattern
@@ -15,35 +26,23 @@ PORT: int                = 2000
 
 RANDOM_SEED: int = 42
 
-# needs to be checked, already got what i could from the paper
 WAYMO_LIDAR_CONFIG = LidarConfig(
-    channels=32,
-    points_per_second=2_240_000,
+    channels=64,
+    points_per_second=1_700_000,
     rotation_frequency=10,
     range=75,
     upper_fov=2,
     lower_fov=-17,
 )
 
-FIXED_DELTA_SECONDS: float = 1.0 / WAYMO_LIDAR_CONFIG.rotation_frequency  # 0.1 s
+FIXED_DELTA_SECONDS: float = 1.0 / WAYMO_LIDAR_CONFIG.rotation_frequency
+N_FRAMES: int = 32
 
-# FIX ME
-N_FRAMES: int = 200
+BLUEPRINT_TOKEN: str = "MercedesCCC"
+BLUEPRINT: str       = "vehicle.mercedes.coupe_2020"
 
-BLUEPRINTS: dict[str, str] = {
-    "lincoln":  "vehicle.lincoln.mkz_2020",
-    "tesla":    "vehicle.tesla.model3",
-    "dodge":    "vehicle.dodge.charger_2020",
-    "ford":     "vehicle.ford.crown",
-    "mercedes": "vehicle.mercedes.coupe_2020",
-}
-
-DISTANCES: list[int] = [5, 10, 20]  # metres from ego
-
-# 8 compass directions in 45° steps
-# 0°=ahead  45°=front-left  90°=left  135°=rear-left
-# 180°=rear 225°=rear-right 270°=right 315°=front-right
-ANGLES: list[int] = list(range(0, 360, 45))
+DISTANCE_RANGE: tuple[float, float] = (1.0, 7.0)
+ANGLE_RANGE:    tuple[float, float] = (0.0, 360.0)
 
 MASK_PATTERNS: list[PerturbationPattern] = [
     PerturbationPattern.CONSTANT,
@@ -61,131 +60,101 @@ MASK_NAMES: dict[PerturbationPattern, str] = {
     PerturbationPattern.IN_AND_OUT:         "in_and_out",
 }
 
-# (directory token, fixed jitter value — None means sample randomly per config)
 JITTER_SETS: list[tuple[str, Optional[float]]] = [
     ("no_jitter",   0.0),
     ("jitter_0p5m", 0.5),
-    ("jitter_rnd",  None),   # actual value sampled from U[0.25, 0.75]
+    ("jitter_rnd",  None),
 ]
 
-# (directory token, global_position_fixed value)
 POSITION_MODES: list[tuple[str, bool]] = [
-    ("ego_relative", False),  # object tracks ego
-    ("world_fixed",  True),   # object pinned in world space
+    ("ego_relative", False),
+    ("world_fixed",  True),
 ]
 
 @dataclass
 class RunConfig:
-    blueprint_token:      str
-    blueprint:            str
-    distance:             int
-    angle:                int
-    pattern:              PerturbationPattern
-    jitter_token:         str
-    jitter:               float   # resolved (never None)
-    position_token:       str
+    instance_name:         str
+    blueprint_token:       str
+    blueprint:             str
+    distance:              float
+    angle:                 float
+    pattern:               PerturbationPattern
+    jitter_token:          str
+    jitter:                float
+    position_token:        str
     global_position_fixed: bool
 
-    @property
-    def dir_name(self) -> str:
-        return (
-            f"{self.blueprint_token}"
-            f"__{self.distance}m"
-            f"__{self.angle}deg"
-            f"__{MASK_NAMES[self.pattern]}"
-            f"__{self.jitter_token}"
-            f"__{self.position_token}"
-        )
-
-    def __str__(self) -> str:
-        return self.dir_name
+    def to_metadata(self) -> dict:
+        return {
+            "instance":              self.instance_name,
+            "blueprint_token":       self.blueprint_token,
+            "blueprint":             self.blueprint,
+            "distance_m":            round(self.distance, 4),
+            "angle_deg":             round(self.angle, 4),
+            "mask_pattern":          MASK_NAMES[self.pattern],
+            "jitter_token":          self.jitter_token,
+            "jitter_m":              round(self.jitter, 4),
+            "position_token":        self.position_token,
+            "global_position_fixed": self.global_position_fixed,
+        }
 
 
 def _resolve_jitter(jitter_val: Optional[float]) -> float:
-    """Resolve a jitter specification: None → sample from U[0.25, 0.75]."""
     if jitter_val is None:
-        return round(random.uniform(0.25, 0.75), 4)
+        return round(float(np.random.uniform(0.25, 0.75)), 4)
     return jitter_val
 
 
-def build_all_configs() -> list[RunConfig]:
-    configs: list[RunConfig] = []
-    product = itertools.product(
-        BLUEPRINTS.items(),
-        DISTANCES,
-        ANGLES,
-        MASK_PATTERNS,
-        JITTER_SETS,
-        POSITION_MODES,
-    )
-    for (bp_token, bp), dist, angle, pattern, (jitter_token, jitter_val), (pos_token, gpf) in product:
+def build_configs(instances: list[Path]) -> list[RunConfig]:
+    configs = []
+    for inst in instances:
         configs.append(RunConfig(
-            blueprint_token=bp_token,
-            blueprint=bp,
-            distance=dist,
-            angle=angle,
-            pattern=pattern,
-            jitter_token=jitter_token,
-            jitter=_resolve_jitter(jitter_val),
-            position_token=pos_token,
-            global_position_fixed=gpf,
+            instance_name=inst.name,
+            blueprint_token=BLUEPRINT_TOKEN,
+            blueprint=BLUEPRINT,
+            distance=float(np.random.uniform(*DISTANCE_RANGE)),
+            angle=float(np.random.uniform(*ANGLE_RANGE)),
+            pattern=random.choice(MASK_PATTERNS),
+            jitter_token=(j := random.choice(JITTER_SETS))[0],
+            jitter=_resolve_jitter(j[1]),
+            position_token=(pm := random.choice(POSITION_MODES))[0],
+            global_position_fixed=pm[1],
         ))
     return configs
 
-def print_header(configs: list[RunConfig]) -> None:
-    n_blueprints  = len(BLUEPRINTS)
-    n_distances   = len(DISTANCES)
-    n_angles      = len(ANGLES)
-    n_masks       = len(MASK_PATTERNS)
-    n_jitter      = len(JITTER_SETS)
-    n_positions   = len(POSITION_MODES)
-
-    print(f"\n{'=' * 72}")
-    print("  Waymo-aligned LiDAR perturbation sweep — run_dataset.py")
-    print(f"{'=' * 72}")
-    print(f"  LiDAR channels       : {WAYMO_LIDAR_CONFIG.channels}")
-    print(f"  LiDAR range          : {WAYMO_LIDAR_CONFIG.range} m  (Waymo Table 2)")
-    print(f"  LiDAR FOV            : [{WAYMO_LIDAR_CONFIG.lower_fov}°, +{WAYMO_LIDAR_CONFIG.upper_fov}°]  (Waymo Table 2)")
-    print(f"  Rotation frequency   : {WAYMO_LIDAR_CONFIG.rotation_frequency} Hz  (Waymo Sec 4.2)")
-    print(f"  Points/sec           : {WAYMO_LIDAR_CONFIG.points_per_second:,}")
-    print(f"  Delta seconds        : {FIXED_DELTA_SECONDS} s")
-    print(f"  Frames per scene     : {N_FRAMES}  (20 s × 10 Hz, Waymo Sec 4.2)")
-    print(f"{'=' * 72}")
-    print(f"  Blueprints  ({n_blueprints:2d})     : {list(BLUEPRINTS.keys())}")
-    print(f"  Distances   ({n_distances:2d})     : {DISTANCES} m")
-    print(f"  Angles      ({n_angles:2d})     : {ANGLES}°  ({n_angles} directions)")
-    print(f"  Mask patterns ({n_masks:2d})   : {[MASK_NAMES[p] for p in MASK_PATTERNS]}")
-    print(f"  Jitter sets ({n_jitter:2d})     : {[t for t, _ in JITTER_SETS]}")
-    print(f"  Position modes ({n_positions:2d})  : {[t for t, _ in POSITION_MODES]}")
-    print(f"{'=' * 72}")
-    print(f"  Total configurations : {len(configs)}"
-          f"  ({n_blueprints} × {n_distances} × {n_angles} × {n_masks} × {n_jitter} × {n_positions})")
-    print(f"  Random seed          : {RANDOM_SEED}")
-    print(f"  Source               : {SOURCE_DATASET_PATH}")
-    print(f"  Output root          : {BASE_OUTPUT_PATH}/perturbed/")
-    print(f"{'=' * 72}\n")
 
 def run(start_from: int = 0) -> None:
-    configs = build_all_configs()
-    total   = len(configs)
+    np.random.seed(RANDOM_SEED)
+    random.seed(RANDOM_SEED)
 
-    print_header(configs)
+    instances = sorted([d for d in Path(SOURCE_DATASET_PATH).iterdir() if d.is_dir()])
+    configs   = build_configs(instances)
+    total     = len(configs)
 
-    if start_from > 0:
-        print(f"Resuming from config index {start_from} (0-based).\n")
+    output_root = Path(BASE_OUTPUT_PATH)
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    print(f"\n{'=' * 60}")
+    print(f"  LiDAR sweep  |  {total} instances  |  seed {RANDOM_SEED}")
+    print(f"  {BLUEPRINT_TOKEN} ({BLUEPRINT})")
+    print(f"  dist {DISTANCE_RANGE}m  angle {ANGLE_RANGE}°")
+    print(f"  output → {output_root}")
+    print(f"{'=' * 60}\n")
+
+    # Write sweep-level metadata
+    with open(output_root / "sweep_metadata.json", "w") as f:
+        json.dump({"random_seed": RANDOM_SEED, "n_frames": N_FRAMES,
+                   "distance_range": DISTANCE_RANGE, "angle_range": ANGLE_RANGE,
+                   "blueprint": BLUEPRINT,
+                   "configs": [c.to_metadata() for c in configs]}, f, indent=2)
 
     completed = 0
     for i, cfg in enumerate(configs[start_from:], start=start_from + 1):
-        output_path = str(Path(BASE_OUTPUT_PATH) / "perturbed" / cfg.dir_name)
-
-        print(f"\n[{i:04d}/{total}] {cfg.dir_name}")
-        print(f"         blueprint       : {cfg.blueprint}")
-        print(f"         distance        : {cfg.distance} m")
-        print(f"         angle           : {cfg.angle}°")
-        print(f"         pattern         : {MASK_NAMES[cfg.pattern]}")
-        print(f"         jitter          : {cfg.jitter} m")
-        print(f"         position mode   : {cfg.position_token}  (global_position_fixed={cfg.global_position_fixed})")
-        print(f"         output          : {output_path}")
+        meta = cfg.to_metadata()
+        print(f"[{i:03d}/{total}] {cfg.instance_name}  "
+              f"dist={meta['distance_m']}m  angle={meta['angle_deg']}°  "
+              f"pattern={meta['mask_pattern']}  jitter={meta['jitter_m']}m  "
+              f"pos={cfg.position_token}")
 
         perturbation = Perturbation(
             blueprint=cfg.blueprint,
@@ -195,15 +164,14 @@ def run(start_from: int = 0) -> None:
             position_jitter=cfg.jitter,
         )
 
-        mask = build_mask(cfg.pattern, N_FRAMES)
-
         builder = DatasetBuilder(
             perturbation=perturbation,
-            mask=mask,
+            mask=build_mask(cfg.pattern, N_FRAMES),
             source_dataset_path=SOURCE_DATASET_PATH,
             fixed_delta_seconds=FIXED_DELTA_SECONDS,
-            output_path=output_path,
-            instance_filter=None,
+            # output_root directly — DatasetBuilder appends instance_name inside
+            output_path=str(output_root),
+            instance_filter=[cfg.instance_name],
             host=HOST,
             port=PORT,
             lidar_config=WAYMO_LIDAR_CONFIG,
@@ -212,21 +180,16 @@ def run(start_from: int = 0) -> None:
         try:
             builder.build_dataset()
             completed += 1
+
         except KeyboardInterrupt:
-            print(f"\nInterrupted at config {i}/{total}.")
-            print(f"To resume, set  start_from={i - 1}  in the run() call at the bottom of this file.")
+            print(f"\nInterrupted at {i}/{total}. Resume with start_from={i-1}")
             sys.exit(0)
         except Exception as e:
-            print(f"  ERROR — {cfg.dir_name}: {e}")
-            import traceback
-            traceback.print_exc()
-            print("  Skipping to next config...")
+            print(f"  ERROR {cfg.instance_name}: {e}")
+            import traceback; traceback.print_exc()
 
-    print(f"\n{'=' * 72}")
-    print(f"  Sweep complete.  {completed}/{total - start_from} configs succeeded.")
-    print(f"  Output: {BASE_OUTPUT_PATH}/perturbed/")
-    print(f"{'=' * 72}\n")
+    print(f"\nDone. {completed}/{total - start_from} succeeded -> {output_root}\n")
+
 
 if __name__ == "__main__":
-    random.seed(RANDOM_SEED)
     run(start_from=0)
