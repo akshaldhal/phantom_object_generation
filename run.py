@@ -1,4 +1,5 @@
 import json
+import os
 import random
 import sys
 from dataclasses import dataclass
@@ -7,16 +8,25 @@ from typing import Optional
 
 import numpy as np
 
-from bench2drive_phantom_objects import DatasetBuilder, LidarConfig, build_mask
+from bench2drive_phantom_objects import (
+    DatasetBuilder,
+    DatasetSize,
+    LidarConfig,
+    build_mask,
+    download_bech2drive_dataset,
+)
 from bench2drive_phantom_objects.dataset_builder import (
     Perturbation,
     PerturbationPattern,
 )
 
-SOURCE_DATASET_PATH: str = "data/Bench2Drive-mini/"
+SOURCE_DATASET_PATH: str = "data/Bench2Drive-base/"
 BASE_OUTPUT_PATH: str = "./data/recorded-lidar"
 HOST: str = "127.0.0.1"
 PORT: int = 2000
+
+if not os.path.exists(SOURCE_DATASET_PATH):
+    download_bech2drive_dataset(size=DatasetSize.BASE)
 
 RANDOM_SEED: int = 42
 
