@@ -1,12 +1,3 @@
-# for each sample randomly sasmple 1 variation
-# 
-# json to record metadata
-# 
-# run on the mini dataset
-# 
-# make distances a range, np.random.sample, similar for angles
-
-
 import json
 import random
 import sys
